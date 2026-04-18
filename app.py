@@ -3,15 +3,15 @@ import time
 
 app = Flask(__name__)
 
-# Data coming FROM the NodeMCU
+# Data received FROM the NodeMCU
 node_data = {
     "temp": 0, "level": 0,
     "hStat": "OFF", "cStat": "OFF", "pStat": "OFF",
     "last_seen": 0,
-    "current_t_min": 22, "current_t_max": 28, "current_l_min": 12 # Confirmed values
+    "current_t_min": 22, "current_t_max": 28, "current_l_min": 12
 }
 
-# Values the User WANTS (Target)
+# Values the User WANTS to set (Target)
 target_thresholds = {
     "t_min": 22, "t_max": 28, "l_min": 12
 }
@@ -25,93 +25,106 @@ def dashboard():
         <title>Aqua-Net Cloud Pro</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
-            body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; display: flex; justify-content: center; padding: 20px; }
-            .card { background: white; width: 100%; max-width: 400px; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; }
-            .val-group { display: flex; justify-content: space-around; margin: 20px 0; }
-            .sensor-circle { width: 100px; height: 100px; border-radius: 50%; border: 5px solid #eee; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-            .temp-circle { border-color: #e74c3c; color: #e74c3c; }
-            .level-circle { border-color: #3498db; color: #3498db; }
-            .settings { background: #fafafa; padding: 15px; border-radius: 12px; text-align: left; margin-top: 20px; }
-            input { width: 50px; padding: 5px; border-radius: 4px; border: 1px solid #ddd; float: right; }
-            .btn { width: 100%; padding: 12px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; font-weight: bold; }
-            .btn:disabled { background: #bdc3c7; cursor: not-allowed; }
-            #sync-msg { font-size: 12px; margin-top: 8px; font-weight: bold; min-height: 15px; }
-            .confirmed-label { font-size: 10px; color: #7f8c8d; display: block; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; display: flex; justify-content: center; padding: 20px; }
+            .card { background: white; width: 100%; max-width: 420px; padding: 30px; border-radius: 25px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); text-align: center; }
+            .status-bar { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+            .val-container { display: flex; justify-content: space-around; margin: 25px 0; }
+            .circle { width: 110px; height: 110px; border-radius: 50%; border: 6px solid #f0f0f0; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+            .t-circ { border-color: #ff7675; color: #d63031; }
+            .l-circ { border-color: #74b9ff; color: #0984e3; }
+            .relay-row { display: flex; justify-content: center; gap: 10px; margin-bottom: 25px; }
+            .r-box { padding: 8px 15px; border-radius: 8px; font-size: 12px; font-weight: bold; color: white; background: #dfe6e9; }
+            .ON { background: #2ecc71 !important; box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3); }
+            .OFF { background: #fab1a0 !important; }
+            .settings { background: #f9f9f9; padding: 20px; border-radius: 15px; text-align: left; }
+            .set-row { margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+            .set-row label { font-size: 13px; font-weight: bold; color: #636e72; }
+            .conf-val { font-size: 10px; color: #b2bec3; display: block; }
+            input { width: 60px; padding: 8px; border-radius: 6px; border: 1px solid #ddd; text-align: center; }
+            .btn { width: 100%; padding: 14px; background: #0984e3; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+            .btn:disabled { background: #b2bec3; cursor: not-allowed; }
+            #msg { font-size: 13px; margin-top: 12px; text-align: center; font-weight: bold; }
         </style>
     </head>
     <body>
         <div class="card">
-            <h2 style="margin-bottom:5px;">Aqua-Net Live</h2>
-            <span id="conn" style="font-size:12px; color:#e74c3c;">● Offline</span>
+            <div class="status-bar">
+                <span>System: <b id="conn" style="color:#d63031">● Offline</b></span>
+                <span id="last-upd">--:--</span>
+            </div>
+            <h2 style="margin:0; color:#2d3436;">Aqua-Net Pro</h2>
             
-            <div class="val-group">
-                <div class="sensor-circle temp-circle"><span style="font-size:10px">TEMP</span><b id="t" style="font-size:20px">0</b></div>
-                <div class="sensor-circle level-circle"><span style="font-size:10px">LEVEL</span><b id="l" style="font-size:20px">0</b></div>
+            <div class="val-container">
+                <div class="circle t-circ"><span style="font-size:11px">TEMP</span><b id="t" style="font-size:24px">--</b></div>
+                <div class="circle l-circ"><span style="font-size:11px">LEVEL</span><b id="l" style="font-size:24px">--</b></div>
+            </div>
+
+            <div class="relay-row">
+                <div class="r-box" id="h-b">HEATER</div>
+                <div class="r-box" id="c-b">COOLER</div>
+                <div class="r-box" id="p-b">PUMP</div>
             </div>
 
             <div class="settings">
-                <div style="font-size:13px; font-weight:bold; margin-bottom:10px; color:#2c3e50;">Set Device Thresholds</div>
-                
-                <p>Min Temp <span class="confirmed-label">Active: <span id="cur-tmin">--</span>°C</span> 
-                <input type="number" id="in-tmin" value="22"></p>
-                
-                <p>Max Temp <span class="confirmed-label">Active: <span id="cur-tmax">--</span>°C</span> 
-                <input type="number" id="in-tmax" value="28"></p>
-                
-                <p>Min Level <span class="confirmed-label">Active: <span id="cur-lmin">--</span>cm</span> 
-                <input type="number" id="in-lmin" value="12"></p>
-                
-                <button id="save-btn" class="btn" onclick="saveSettings()">Save Settings</button>
-                <div id="sync-msg"></div>
+                <div class="set-row">
+                    <div><label>Min Temp</label><span class="conf-val">Active: <span id="cur-tmin">--</span>°C</span></div>
+                    <input type="number" id="in-tmin" value="22">
+                </div>
+                <div class="set-row">
+                    <div><label>Max Temp</label><span class="conf-val">Active: <span id="cur-tmax">--</span>°C</span></div>
+                    <input type="number" id="in-tmax" value="28">
+                </div>
+                <div class="set-row">
+                    <div><label>Min Level</label><span class="conf-val">Active: <span id="cur-lmin">--</span>cm</span></div>
+                    <input type="number" id="in-lmin" value="12">
+                </div>
+                <button id="save-btn" class="btn" onclick="save()">Save Settings</button>
+                <div id="msg"></div>
             </div>
         </div>
 
         <script>
-            let serverData = {};
-
             async function refresh() {
                 const res = await fetch('/get_full_state');
-                const data = await res.json();
-                serverData = data;
+                const d = await res.json();
 
-                document.getElementById('t').innerText = data.node.temp + "°C";
-                document.getElementById('l').innerText = data.node.level + "cm";
+                document.getElementById('t').innerText = d.node.temp + "°C";
+                document.getElementById('l').innerText = d.node.level + "cm";
                 
-                document.getElementById('cur-tmin').innerText = data.node.current_t_min;
-                document.getElementById('cur-tmax').innerText = data.node.current_t_max;
-                document.getElementById('cur-lmin').innerText = data.node.current_l_min;
+                document.getElementById('cur-tmin').innerText = d.node.current_t_min;
+                document.getElementById('cur-tmax').innerText = d.node.current_t_max;
+                document.getElementById('cur-lmin').innerText = d.node.current_l_min;
 
-                const online = (Date.now()/1000) - data.node.last_seen < 15;
+                document.getElementById('h-b').className = "r-box " + d.node.hStat;
+                document.getElementById('c-b').className = "r-box " + d.node.cStat;
+                document.getElementById('p-box').className = "r-box " + d.node.pStat;
+
+                // FIX: Account for Render latency (30s)
+                const online = (Date.now()/1000) - d.node.last_seen < 30;
                 const conn = document.getElementById('conn');
                 conn.innerText = online ? "● Online" : "● Offline";
-                conn.style.color = online ? "#2ecc71" : "#e74c3c";
+                conn.style.color = online ? "#2ecc71" : "#d63031";
 
-                // Validation: Check if inputs match current server targets
                 const btn = document.getElementById('save-btn');
                 const changed = 
-                    document.getElementById('in-tmin').value != data.target.t_min ||
-                    document.getElementById('in-tmax').value != data.target.t_max ||
-                    document.getElementById('in-lmin').value != data.target.l_min;
+                    document.getElementById('in-tmin').value != d.target.t_min ||
+                    document.getElementById('in-tmax').value != d.target.t_max ||
+                    document.getElementById('in-lmin').value != d.target.l_min;
                 
-                if(!btn.dataset.syncing) {
-                    btn.disabled = !changed;
-                }
+                if(!btn.dataset.syncing) btn.disabled = !changed;
             }
 
-            async function saveSettings() {
+            async function save() {
                 const btn = document.getElementById('save-btn');
-                const msg = document.getElementById('sync-msg');
-                
+                const msg = document.getElementById('msg');
                 const payload = {
                     t_min: parseInt(document.getElementById('in-tmin').value),
                     t_max: parseInt(document.getElementById('in-tmax').value),
                     l_min: parseInt(document.getElementById('in-lmin').value)
                 };
 
-                btn.dataset.syncing = "true";
-                btn.disabled = true;
-                msg.innerText = "⏳ Sending to NodeMCU...";
-                msg.style.color = "#f39c12";
+                btn.dataset.syncing = "true"; btn.disabled = true;
+                msg.innerText = "⏳ Syncing with Device..."; msg.style.color = "#f39c12";
 
                 await fetch('/update_targets', {
                     method: 'POST',
@@ -119,26 +132,24 @@ def dashboard():
                     body: JSON.stringify(payload)
                 });
 
-                // Polling for confirmation (Source of Truth check)
-                let success = false;
-                for(let i=0; i<30; i++) { // Wait up to 30 seconds
+                // Source of Truth Handshake Polling
+                let confirmed = false;
+                for(let i=0; i<40; i++) { 
                     await new Promise(r => setTimeout(r, 1000));
                     const check = await fetch('/get_full_state').then(r => r.json());
                     if(check.node.current_t_min == payload.t_min && 
                        check.node.current_t_max == payload.t_max && 
                        check.node.current_l_min == payload.l_min) {
-                        success = true;
-                        break;
+                        confirmed = true; break;
                     }
                 }
 
                 btn.dataset.syncing = "";
-                msg.innerText = success ? "✔ Settings Updated Locally" : "✖ Sync Failed (Timeout)";
-                msg.style.color = success ? "#2ecc71" : "#e74c3c";
-                setTimeout(() => { msg.innerText = ""; }, 4000);
+                msg.innerText = confirmed ? "✔ Confirmed & Saved" : "✖ Sync Timeout";
+                msg.style.color = confirmed ? "#2ecc71" : "#e74c3c";
+                setTimeout(() => { msg.innerText = ""; }, 5000);
             }
-
-            setInterval(refresh, 1500);
+            setInterval(refresh, 2000);
         </script>
     </body>
     </html>
@@ -157,13 +168,10 @@ def update_targets():
 @app.route('/sync', methods=['POST'])
 def sync():
     data = request.json
-    # NodeMCU sends its CURRENT thresholds so we can confirm them
     node_data.update({
         "temp": data.get("t"), "level": data.get("l"),
         "hStat": data.get("h"), "cStat": data.get("c"), "pStat": data.get("p"),
-        "current_t_min": data.get("t_min"), 
-        "current_t_max": data.get("t_max"), 
-        "current_l_min": data.get("l_min"),
+        "current_t_min": data.get("t_min"), "current_t_max": data.get("t_max"), "current_l_min": data.get("l_min"),
         "last_seen": time.time()
     })
     return jsonify(target_thresholds)
